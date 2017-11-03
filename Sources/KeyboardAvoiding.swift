@@ -35,7 +35,7 @@ import UIKit
         }
     }
     public static var keyboardAvoidingMode = KeyboardAvoidingMode.minimum
-    public static var avoidingBlock: ((Bool, CGFloat, CGFloat, UIViewAnimationOptions)->Void)? {
+    public static var avoidingBlock: ((Bool, CGFloat, CGFloat, CGFloat, UIViewAnimationOptions)->Void)? {
         willSet {
             self.initialise()
         }
@@ -184,7 +184,7 @@ import UIKit
                     }
                 }
                 if self.avoidingBlock != nil {
-                    self.avoidingBlock!(isKeyBoardShowing, animationDuration, keyboardFrame.size.height, UIViewAnimationOptions(rawValue: UInt(animationOptions)))
+                    self.avoidingBlock!(isKeyBoardShowing, animationDuration, diff, keyboardFrame.size.height, UIViewAnimationOptions(rawValue: UInt(animationOptions)))
                 }
             }
             
@@ -224,7 +224,7 @@ import UIKit
                 })
             }
             if self.avoidingBlock != nil {
-                self.avoidingBlock!(isKeyBoardShowing, animationDuration + 0.075, 0, UIViewAnimationOptions(rawValue: UInt(animationOptions)))
+                self.avoidingBlock!(isKeyBoardShowing, animationDuration + 0.075, 0, 0, UIViewAnimationOptions(rawValue: UInt(animationOptions)))
             }
         }
         self.isKeyboardVisible = CGRect(x: CGFloat(0), y: CGFloat(0), width: CGFloat(screenSize.width), height: CGFloat(screenSize.height)).intersects(keyboardFrame)
