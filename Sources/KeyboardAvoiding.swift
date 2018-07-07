@@ -20,13 +20,14 @@ import UIKit
     private static var lastNotification: Foundation.Notification?
     private static var updatedConstraints = [NSLayoutConstraint]()
     private static var updatedConstraintConstants = [CGFloat]()
-    private(set) static var isKeyboardVisible = false
     private static var avoidingViewUsesAutoLayout = false
     private static var triggerViews = [UIView]()
+    private static var showingAnimationCount = 0
     
+    public private(set) static var isKeyboardVisible = false
     public static var buffer: CGFloat = 0.0
     public static var paddingForCurrentAvoidingView: CGFloat = 0.0
-    public static var padding: CGFloat = 0.0 {
+    @objc public static var padding: CGFloat = 0.0 {
         willSet {
             if self.paddingForCurrentAvoidingView == newValue {
                 // if paddingCurrent has been set explicitly, dont reset it
@@ -35,7 +36,7 @@ import UIKit
         }
     }
     public static var keyboardAvoidingMode = KeyboardAvoidingMode.minimum
-    public static var avoidingBlock: ((Bool, CGFloat, CGFloat, CGFloat, UIViewAnimationOptions)->Void)? {
+    @objc public static var avoidingBlock: ((Bool, CGFloat, CGFloat, CGFloat, UIViewAnimationOptions)->Void)? {
         willSet {
             self.initialise()
         }
@@ -43,11 +44,10 @@ import UIKit
             if self.triggerViews.count == 0 && self.avoidingBlock != nil {
                 self.triggerViews.append(UIView())
             }
-            self.deinitialise()
         }
     }
     private static var _avoidingView: UIView?
-    public static var avoidingView: UIView? {
+    @objc public static var avoidingView: UIView? {
         get {
             return _avoidingView
         }
@@ -65,7 +65,12 @@ import UIKit
         
         let keyboardFrame = notification.userInfo![UIKeyboardFrameEndUserInfoKey] as! CGRect
         // keyboardHeightDiff used when user is switching between different keyboards that have different heights
-        let keyboardFrameBegin = notification.userInfo![UIKeyboardFrameBeginUserInfoKey] as! CGRect
+        var keyboardFrameBegin = notification.userInfo![UIKeyboardFrameBeginUserInfoKey] as! CGRect
+        
+        // hack for bug in iOS 11.2
+        let keyboardFrameEnd = notification.userInfo![UIKeyboardFrameEndUserInfoKey] as! CGRect
+        keyboardFrameBegin = CGRect(x: keyboardFrameBegin.origin.x, y: keyboardFrameBegin.origin.y, width: keyboardFrameBegin.size.width, height: keyboardFrameEnd.size.height)
+        
         var keyboardHeightDiff:CGFloat = 0.0
         if keyboardFrameBegin.size.height > 0 {
             keyboardHeightDiff = keyboardFrameBegin.size.height - keyboardFrame.size.height
@@ -96,6 +101,7 @@ import UIKit
             animationDuration = 0.1
         }
         if isKeyBoardShowing {
+            self.showingAnimationCount = 0
             for triggerView in self.triggerViews {
                 
                 //showing and docked
@@ -169,6 +175,7 @@ import UIKit
                             }
                             self.avoidingView!.superview!.setNeedsUpdateConstraints()
                         }
+                        self.showingAnimationCount += 1
                         
                         UIView.animate(withDuration: TimeInterval(animationDuration), delay: TimeInterval(delay), options: UIViewAnimationOptions(rawValue: UInt(animationOptions)), animations: {() -> Void in
                             if self.avoidingViewUsesAutoLayout {
@@ -180,7 +187,9 @@ import UIKit
                                 transform = transform.translatedBy(x: 0, y: displacement)
                                 self.avoidingView!.transform = transform
                             }
-                        }, completion: { _ in })
+                        }, completion: { _ in
+                            self.showingAnimationCount -= 1
+                        })
                     }
                 }
                 if self.avoidingBlock != nil {
@@ -219,8 +228,10 @@ import UIKit
                         self.avoidingView!.transform = CGAffineTransform.identity
                     }
                 }, completion: {(_ finished: Bool) -> Void in
-                    self.updatedConstraints.removeAll()
-                    self.updatedConstraintConstants.removeAll()
+                    if self.showingAnimationCount <= 0 {
+                        self.updatedConstraints.removeAll()
+                        self.updatedConstraintConstants.removeAll()
+                    }
                 })
             }
             if self.avoidingBlock != nil {
@@ -230,8 +241,8 @@ import UIKit
         self.isKeyboardVisible = CGRect(x: CGFloat(0), y: CGFloat(0), width: CGFloat(screenSize.width), height: CGFloat(screenSize.height)).intersects(keyboardFrame)
     }
     
-    // publicly, the triggerView is reqiured if the avoidingView isn't nil
-    public class func setAvoidingView(_ avoidingView: UIView?, withTriggerView triggerView: UIView) {
+    // The triggerView is required if the avoidingView isn't nil
+    @objc public class func setAvoidingView(_ avoidingView: UIView?, withTriggerView triggerView: UIView) {
         self.setAvoidingView(avoidingView, withOptionalTriggerView: triggerView)
     }
     
@@ -252,7 +263,6 @@ import UIKit
             // perform avoiding immediately
             self.didChange(self.lastNotification!)
         }
-        self.deinitialise()
     }
     
     public class func addTriggerView(_ triggerView: UIView) {
@@ -260,7 +270,7 @@ import UIKit
     }
     
     public class func removeTriggerView(_ triggerView: UIView) {
-        if let index = triggerViews.index(of: triggerView) as Int! {
+        if let index = triggerViews.index(of: triggerView) {
             self.triggerViews.remove(at: index)
         }
     }
@@ -281,12 +291,6 @@ import UIKit
             NotificationCenter.default.addObserver(forName: NSNotification.Name.UIKeyboardWillChangeFrame, object: nil, queue: OperationQueue.main, using: { notification in
                 self.didChange(notification)
             })
-        }
-    }
-    private class func deinitialise() {
-        // make sure we only add this once
-        if self.avoidingBlock == nil && self.avoidingView == nil {
-            NotificationCenter.default.removeObserver(self)
         }
     }
 }
